@@ -56,6 +56,9 @@ export default function Interview() {
   const [generatedQuestions, setGeneratedQuestions] = useState<Question[]>([])
   const [isGenerating, setIsGenerating] = useState(false)
   const [expandedQuestions, setExpandedQuestions] = useState<Set<number>>(new Set())
+  const [newSkill, setNewSkill] = useState("");
+  const [addingSkill, setAddingSkill] = useState(false);
+  const [showSkillInput, setShowSkillInput] = useState(false);
 
   // API data states
   const [roles, setRoles] = useState<Role[]>([])
@@ -218,6 +221,33 @@ export default function Interview() {
     if (fileInput) fileInput.value = ''
   }
 
+  // Add new skill to selected role
+  const handleAddSkill = async () => {
+    if (!newSkill.trim() || !selectedRole) return;
+    setAddingSkill(true);
+    try {
+      const role = roles.find(r => r._id === selectedRole);
+      if (!role) throw new Error("Role not found");
+      const updatedSkills = [...role.skills, newSkill.trim()];
+      const response = await fetch(`http://localhost:3000/api/candidate-role-skills/${selectedRole}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ skills: updatedSkills })
+      });
+      if (!response.ok) throw new Error(`Failed to add skill: ${response.status}`);
+      setNewSkill("");
+      setShowSkillInput(false);
+      await fetchRoles();
+      setSelectedSkills(prev => [...prev, newSkill.trim()]);
+      toast({ title: "Skill added", description: `${newSkill.trim()} has been added to the role.` });
+    } catch (error) {
+      console.error('Error adding skill:', error);
+      toast({ title: "Error", description: "Failed to add skill. Please try again.", variant: "destructive" });
+    } finally {
+      setAddingSkill(false);
+    }
+  };
+
   if (loading) {
     return (
       <Layout 
@@ -359,10 +389,46 @@ export default function Interview() {
                 {/* Skills Selection */}
                 {selectedRole && (
                   <div>
-                    <Label className="text-sm font-medium">
-                      Select Skills ({selectedSkills.length} selected)
-                    </Label>
-                    <div className="flex flex-wrap gap-2 mt-2">
+                    <div className="flex items-center gap-2">
+                      <Label className="text-sm font-medium">
+                        Select Skills ({selectedSkills.length} selected)
+                      </Label>
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="outline"
+                        className="h-6 w-6 p-0 flex items-center justify-center"
+                        onClick={() => setShowSkillInput(v => !v)}
+                        aria-label="Add Skill"
+                      >
+                        <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-plus"><line x1="8" y1="1" x2="8" y2="15"></line><line x1="1" y1="8" x2="15" y2="8"></line></svg>
+                      </Button>
+                    </div>
+                    {showSkillInput && (
+                      <div className="flex gap-2 mt-3 p-2 rounded-md border border-muted bg-muted/40">
+                        <Input
+                          value={newSkill}
+                          onChange={e => setNewSkill(e.target.value)}
+                          placeholder="Add new skill"
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') handleAddSkill();
+                            if (e.key === 'Escape') setShowSkillInput(false);
+                          }}
+                          disabled={addingSkill}
+                          className="flex-1"
+                          autoFocus
+                        />
+                        <Button
+                          type="button"
+                          onClick={handleAddSkill}
+                          disabled={!newSkill.trim() || addingSkill}
+                          className="interview-button-secondary"
+                        >
+                          {addingSkill ? "Adding..." : "Add"}
+                        </Button>
+                      </div>
+                    )}
+                    <div className="flex flex-wrap gap-2 mt-3">
                       {availableSkills.map(skill => (
                         <Badge
                           key={skill}
