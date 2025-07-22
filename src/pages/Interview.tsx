@@ -59,6 +59,7 @@ export default function Interview() {
   const [newSkill, setNewSkill] = useState("");
   const [addingSkill, setAddingSkill] = useState(false);
   const [showSkillInput, setShowSkillInput] = useState(false);
+  const [customInstructions, setCustomInstructions] = useState("");
 
   // API data states
   const [roles, setRoles] = useState<Role[]>([])
@@ -151,7 +152,9 @@ export default function Interview() {
       formData.append('skills', JSON.stringify(selectedSkills))
       formData.append('questionComplexity', complexity.toString())
       formData.append('numberOfQuestions', questionCount.toString())
-      
+      if (customInstructions.trim()) {
+        formData.append('customInstructions', customInstructions.trim())
+      }
       // Add the uploaded file if it exists
       if (uploadedFile) {
         formData.append('pdf', uploadedFile)
@@ -215,6 +218,7 @@ export default function Interview() {
     setQuestionCount(10)
     setGeneratedQuestions([])
     setExpandedQuestions(new Set())
+    setCustomInstructions("");
     
     // Clear file input
     const fileInput = document.getElementById('resume-upload') as HTMLInputElement
@@ -545,6 +549,19 @@ export default function Interview() {
                      questionCount <= 10 ? 'Standard interview' :
                      questionCount <= 15 ? 'Comprehensive interview' : 'Extended assessment'}
                   </p>
+                </div>
+
+                {/* Custom Instructions Textarea */}
+                <div>
+                  <Label className="text-sm font-medium mb-1 block">Additional Instructions (optional)</Label>
+                  <textarea
+                    value={customInstructions}
+                    onChange={e => setCustomInstructions(e.target.value)}
+                    placeholder="Add any custom instructions or context for generating the questions..."
+                    rows={3}
+                    className="w-full rounded-md border border-muted bg-muted/40 p-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-vertical"
+                    style={{ minHeight: '60px' }}
+                  />
                 </div>
 
                 {/* Generate Button */}

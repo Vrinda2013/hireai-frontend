@@ -14,9 +14,9 @@ import {
 } from "@/components/ui/sidebar"
 
 const navItems = [
-  { title: "Roles & Skills", url: "/roles", icon: Briefcase },
-  { title: "Candidates", url: "/candidates", icon: Users },
   { title: "Interview", url: "/", icon: ClipboardList },
+  { title: "Candidates", url: "/candidates", icon: Users },
+  { title: "Roles & Skills", url: "/roles", icon: Briefcase },
 ]
 
 export function AppSidebar() {
