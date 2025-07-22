@@ -121,10 +121,6 @@ export default function Candidates() {
           <span className="text-sm text-muted-foreground">
             {filteredCandidates.length} of {candidates.length} candidate{candidates.length !== 1 ? 's' : ''}
           </span>
-          <Button className="interview-button-primary">
-            <Upload className="h-4 w-4 mr-2" />
-            Upload Resume
-          </Button>
         </div>
       }
     >
