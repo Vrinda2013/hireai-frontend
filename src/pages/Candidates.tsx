@@ -34,7 +34,7 @@ interface CandidateAPI {
     company?: string
     years?: string | null
     description?: string
-  }>
+    }>
   technicalSkills?: string[]
   softSkills?: string[]
   createdAt?: string
@@ -121,7 +121,7 @@ export default function Candidates() {
       (roleApplied?.role && roleApplied.role.toLowerCase().includes(search)) ||
       (technicalSkills && technicalSkills.some(skill => skill.toLowerCase().includes(search))) ||
       (softSkills && softSkills.some(skill => skill.toLowerCase().includes(search)))
-    )
+  )
   })
 
   return (

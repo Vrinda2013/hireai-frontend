@@ -165,11 +165,47 @@ export default function Interview() {
         body: formData
       })
 
-      if (!response.ok) {
-        throw new Error(`Failed to generate questions: ${response.status}`)
+      let result = null;
+      try {
+        result = await response.json();
+      } catch (e) {
+        toast({
+          title: "Error",
+          description: "Failed to generate questions. Please try again.",
+          variant: "destructive"
+        });
+        return;
       }
 
-      const result: APIResponse = await response.json()
+      // Show custom error if present (object)
+      if (result && result.success === false && result.error) {
+        toast({
+          title: "Error Generating Questions",
+          description: `${result.error}\n${result.reason || ''}`,
+          variant: "destructive"
+        });
+        return;
+      }
+      // Show custom error if present (array)
+      if (Array.isArray(result) && result[0]?.error) {
+        toast({
+          title: "Error Generating Questions",
+          description: `${result[0].error}\n${result[0].reason || ''}`,
+          variant: "destructive"
+        });
+        return;
+      }
+
+      // Only show generic error if nothing else matched
+      if (!response.ok) {
+        toast({
+          title: "Error",
+          description: "Failed to generate questions. Please try again.",
+          variant: "destructive"
+        });
+        return;
+      }
+
       const questions = result.data?.questions || []
       
       // Transform the API response to match our Question interface
