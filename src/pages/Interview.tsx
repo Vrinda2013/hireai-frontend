@@ -9,8 +9,9 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
-import { Upload, FileText, Settings, ChevronDown, ChevronRight, Sparkles, RotateCcw, AlertCircle } from "lucide-react"
+import { Upload, FileText, Settings, ChevronDown, ChevronRight, Sparkles, RotateCcw, AlertCircle, Download } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 
 interface Question {
   question: string
@@ -224,6 +225,117 @@ export default function Interview() {
     const fileInput = document.getElementById('resume-upload') as HTMLInputElement
     if (fileInput) fileInput.value = ''
   }
+
+  const exportQuestions = async (format: 'csv' | 'json' | 'pdf', includeAnswers: boolean) => {
+    const data = generatedQuestions.map(q => ({
+      Question: q.question,
+      Type: q.type,
+      Complexity: q.complexity,
+      ...(includeAnswers && { ExpectedAnswer: q.expectedAnswer }),
+      Skills: q.skills.join(', ')
+    }));
+
+    if (format === 'csv' || format === 'json') {
+      let blob: Blob;
+      let filename: string;
+
+      if (format === 'csv') {
+        const csvContent = [
+          Object.keys(data[0]).join(','), // Header
+          ...data.map(row => Object.values(row).map(val => `"${String(val).replace(/"/g, '""')}"`).join(','))
+        ].join('\r\n');
+        blob = new Blob([csvContent], { type: 'text/csv' });
+        filename = `interview_questions.csv`;
+      } else {
+        blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        filename = `interview_questions.json`;
+      }
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      return;
+    }
+
+    // PDF: Call backend endpoint
+    try {
+      const response = await fetch('http://localhost:3000/api/interview-questions/export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          questions: generatedQuestions,
+          metadata: {
+            exportFormat: 'pdf',
+            exportType: includeAnswers ? 'questions-and-answers' : 'questions-only',
+          }
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to export PDF');
+      }
+
+      const contentDisposition = response.headers.get('content-disposition');
+      const filename =
+        contentDisposition && contentDisposition.includes('filename=')
+          ? contentDisposition.split('filename=')[1].replace(/"/g, '')
+          : `interview_questions.pdf`;
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      toast({
+        title: "Export failed",
+        description: "Failed to export PDF. Please try again.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const exportQuestionsAsPDF = async (includeAnswers: boolean) => {
+    try {
+      const response = await fetch('http://localhost:3000/api/interview-questions/export/pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          questions: generatedQuestions,
+          includeAnswers
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to export PDF');
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'interview_questions.pdf';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      toast({
+        title: "Export failed",
+        description: "Failed to export PDF. Please try again.",
+        variant: "destructive"
+      });
+    }
+  };
 
   if (loading) {
     return (
@@ -530,9 +642,51 @@ export default function Interview() {
                 <CardHeader>
                   <CardTitle className="flex items-center justify-between">
                     <span>Interview Questions</span>
-                    <Badge variant="secondary">
-                      {generatedQuestions.length} questions
-                    </Badge>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="secondary">
+                        {generatedQuestions.length} questions
+                      </Badge>
+                    </div>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          className="ml-4"
+                        >
+                          <Download className="h-4 w-4 mr-2" />
+                          Export
+                          <ChevronDown className="h-4 w-4 ml-1" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-56">
+                        <div className="px-2 py-1.5 text-sm font-medium text-muted-foreground">
+                          Questions Only
+                        </div>
+                        <DropdownMenuItem onClick={() => exportQuestions('csv', false)}>
+                          📊 CSV File (.csv)
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => exportQuestions('json', false)}>
+                          📄 JSON File (.json)
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => exportQuestionsAsPDF(false)}>
+                          📋 PDF Document (.pdf)
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <div className="px-2 py-1.5 text-sm font-medium text-muted-foreground">
+                          Questions + Answers
+                        </div>
+                        <DropdownMenuItem onClick={() => exportQuestions('csv', true)}>
+                          📊 CSV with Answers (.csv)
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => exportQuestions('json', true)}>
+                          📄 JSON with Answers (.json)
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => exportQuestionsAsPDF(true)}>
+                          📋 PDF with Answers (.pdf)
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
