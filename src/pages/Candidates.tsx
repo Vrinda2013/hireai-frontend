@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Layout } from "@/components/Layout"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -6,9 +6,26 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"
-import { Search, Eye, Upload, User, Mail, Phone, Calendar, Briefcase, GraduationCap, Trash2 } from "lucide-react"
-import { useEffect, useRef } from "react"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { Search, Eye, Upload, User, Mail, Phone, Calendar, Briefcase, GraduationCap, Trash2, Filter, ChevronDown, MapPin } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { cn } from "@/lib/utils"
+
+// Helper function to format date
+const formatDate = (dateString: string) => {
+  if (!dateString) return "Date not available"
+  try {
+    const date = new Date(dateString)
+    return date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    })
+  } catch (error) {
+    return "Invalid date"
+  }
+}
 
 // --- Types matching the API ---
 interface CandidateAPI {
@@ -40,7 +57,33 @@ interface CandidateAPI {
   technicalSkills?: string[]
   softSkills?: string[]
   createdAt?: string
+  status?: CandidateStatus
 }
+
+export type CandidateStatus = "in-progress" | "hold" | "accepted" | "rejected";
+
+const statusConfig = {
+  "in-progress": {
+    label: "In Progress",
+    color: "bg-blue-500 text-white",
+    variant: "default" as const
+  },
+  "hold": {
+    label: "On Hold",
+    color: "bg-orange-500 text-white",
+    variant: "secondary" as const
+  },
+  "accepted": {
+    label: "Accepted",
+    color: "bg-green-500 text-white",
+    variant: "default" as const
+  },
+  "rejected": {
+    label: "Rejected",
+    color: "bg-red-500 text-white",
+    variant: "destructive" as const
+  }
+};
 
 export default function Candidates() {
   const [searchTerm, setSearchTerm] = useState("")
@@ -56,6 +99,7 @@ export default function Candidates() {
   const [error, setError] = useState<string | null>(null)
   const [deletingCandidate, setDeletingCandidate] = useState<string | null>(null)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState<string | null>(null)
+  const [statusFilter, setStatusFilter] = useState<string>("all")
   const observer = useRef<HTMLDivElement | null>(null)
   const { toast } = useToast()
 
@@ -94,13 +138,31 @@ export default function Candidates() {
     }
   }
 
+  // Handle status change
+  const handleStatusChange = (id: string, newStatus: CandidateStatus) => {
+    setCandidates(prev => 
+      prev.map(candidate => 
+        candidate._id === id ? { ...candidate, status: newStatus } : candidate
+      )
+    );
+    toast({
+      title: "Status Updated",
+      description: "Candidate status has been successfully updated.",
+    });
+  };
+
   // Fetch candidates for a page
   const fetchCandidates = (pageNum: number) => {
     setLoading(true)
     fetch(`http://localhost:3000/api/candidate-resumes?page=${pageNum}&limit=5`)
       .then(res => res.json())
       .then(data => {
-        setCandidates(data.data || [])
+        // Add default status to candidates if not present
+        const candidatesWithStatus = (data.data || []).map((candidate: CandidateAPI) => ({
+          ...candidate,
+          status: candidate.status || "in-progress" as CandidateStatus
+        }));
+        setCandidates(candidatesWithStatus)
         setTotalPages(data.pagination?.pages || 1)
         setPage(data.pagination?.page || 1)
         setHasMore(data.pagination?.page < data.pagination?.pages)
@@ -127,7 +189,12 @@ export default function Candidates() {
     })
       .then(res => res.json())
       .then(data => {
-        setCandidates(data.data || [])
+        // Add default status to candidates if not present
+        const candidatesWithStatus = (data.data || []).map((candidate: CandidateAPI) => ({
+          ...candidate,
+          status: candidate.status || "in-progress" as CandidateStatus
+        }));
+        setCandidates(candidatesWithStatus)
         setTotalPages(1)
         setPage(1)
         setError(null)
@@ -148,11 +215,11 @@ export default function Candidates() {
     fetchCandidates(newPage)
   }
 
-  // Only filter client-side if not in search mode
-  const filteredCandidates = searchMode ? candidates : candidates.filter(candidate => {
+  // Filter candidates based on search and status
+  const filteredCandidates = candidates.filter(candidate => {
     const { personalInfo, professionalInfo, roleApplied, technicalSkills, softSkills } = candidate
     const search = searchTerm.toLowerCase()
-    return (
+    const matchesSearch = searchMode ? true : (
       personalInfo.fullName.toLowerCase().includes(search) ||
       personalInfo.email.toLowerCase().includes(search) ||
       (personalInfo.phone && personalInfo.phone.toLowerCase().includes(search)) ||
@@ -161,8 +228,10 @@ export default function Candidates() {
       (roleApplied?.role && roleApplied.role.toLowerCase().includes(search)) ||
       (technicalSkills && technicalSkills.some(skill => skill.toLowerCase().includes(search))) ||
       (softSkills && softSkills.some(skill => skill.toLowerCase().includes(search)))
-  )
-  })
+    );
+    const matchesStatus = statusFilter === "all" || candidate.status === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
 
   return (
     <Layout 
@@ -175,12 +244,11 @@ export default function Candidates() {
         </div>
       }
     >
-      <div className="max-w-6xl mx-auto space-y-6">
-        {/* Search Bar */}
-        <Card>
-          <CardContent className="pt-6">
-            <div className="relative flex items-center gap-2">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+      <div className="w-full px-8 space-y-6">
+        {/* Search and Filter Section */}
+        <div className="flex items-center gap-4 mb-6">
+          <div className="relative flex-1 max-w-md">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
               <Input
                 placeholder="Search by candidate email..."
                 value={searchTerm}
@@ -191,115 +259,145 @@ export default function Candidates() {
                 type="email"
                 autoComplete="off"
               />
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleSearch}
-                disabled={searchLoading || loading || !searchTerm.trim()}
-              >
-                {searchLoading ? 'Searching...' : 'Search'}
-              </Button>
-              {searchMode && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => { setSearchTerm(""); setSearchMode(false); fetchCandidates(1); }}
-                  disabled={loading}
-                >
-                  Clear
-                </Button>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+          </div>
+          
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-48">
+              <Filter className="w-4 h-4 mr-2" />
+              <SelectValue placeholder="Filter by status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Status</SelectItem>
+              <SelectItem value="in-progress">In Progress</SelectItem>
+              <SelectItem value="hold">On Hold</SelectItem>
+              <SelectItem value="accepted">Accepted</SelectItem>
+              <SelectItem value="rejected">Rejected</SelectItem>
+            </SelectContent>
+          </Select>
 
-        {/* Candidates Table */}
-        <Card className="interview-card">
-          <CardHeader>
-            <CardTitle>Candidate Database</CardTitle>
-          </CardHeader>
-          <CardContent>
+          <Button variant="outline" className="gap-2" onClick={handleSearch}>
+            Search
+                </Button>
+            </div>
+
+        {/* Candidate Database Section */}
+        <div className="mb-6">
+          <h2 className="text-xl font-semibold text-foreground mb-4">Candidate Database</h2>
+          
             {loading && (
               <div className="text-center py-12 text-muted-foreground">Loading candidates...</div>
             )}
             {error && (
               <div className="text-center py-12 text-destructive">{error}</div>
             )}
+          
             <div className="space-y-4">
-              {filteredCandidates.map((candidate) => (
-                <div 
-                  key={candidate._id}
-                  className="p-4 border border-border rounded-lg hover:bg-muted/50 transition-colors"
-                >
+            {filteredCandidates.map((candidate) => {
+              const statusInfo = statusConfig[candidate.status || "in-progress"];
+              return (
+                <Card key={candidate._id} className="p-5 hover:shadow-md transition-shadow w-full">
                   <div className="flex items-center justify-between">
-                    <div className="flex-1 space-y-2">
-                      {/* Candidate Info */}
-                      <div className="flex items-center gap-4 flex-wrap">
-                        <div className="flex items-center gap-2">
-                          <User className="h-4 w-4 text-muted-foreground" />
-                          <span className="font-semibold">{candidate.personalInfo.fullName}</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <Mail className="h-4 w-4" />
-                          {candidate.personalInfo.email}
-                        </div>
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <Phone className="h-4 w-4" />
-                          {candidate.personalInfo.phone}
-                        </div>
-                        {candidate.personalInfo.location && (
-                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                            <Briefcase className="h-4 w-4" />
-                            {candidate.personalInfo.location}
-                          </div>
-                        )}
-                        {candidate.professionalInfo.currentTitle && (
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                            <GraduationCap className="h-4 w-4" />
-                            {candidate.professionalInfo.currentTitle}
-                        </div>
-                        )}
+                    <div className="flex items-center gap-4 flex-1 min-w-0">
+                      <div className="candidate-avatar-custom w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0">
+                        {/* Custom filled person SVG icon, blue color to match theme */}
+                        <svg width="28" height="28" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                          <circle cx="12" cy="8" r="4" style={{ fill: '#0052CC' }} />
+                          <path d="M4 20c0-2.21 3.58-4 8-4s8 1.79 8 4v1H4v-1z" style={{ fill: '#0052CC' }} />
+                        </svg>
                       </div>
-
-                      {/* Role Applied */}
-                      {candidate.roleApplied?.role && (
-                        <div className="flex items-center gap-2">
-                          <Briefcase className="h-4 w-4 text-muted-foreground" />
-                          <Badge variant="outline">{candidate.roleApplied.role}</Badge>
+                      
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-3 mb-3">
+                          <h3 className="font-semibold text-lg text-foreground truncate">{candidate.personalInfo.fullName}</h3>
+                          <Badge className={cn("text-xs font-medium flex-shrink-0", statusInfo.color)}>
+                            {statusInfo.label}
+                          </Badge>
                         </div>
-                      )}
+                        
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4 text-sm text-muted-foreground">
+                          <div className="flex items-center gap-2">
+                            <Mail className="w-4 h-4 flex-shrink-0" />
+                            <span className="truncate">{candidate.personalInfo.email}</span>
+                        </div>
+                          <div className="flex items-center gap-2">
+                            <Phone className="w-4 h-4 flex-shrink-0" />
+                            <span className="truncate">{candidate.personalInfo.phone}</span>
+                        </div>
+                          <div className="flex items-center gap-2">
+                            <MapPin className="w-4 h-4 flex-shrink-0" />
+                            <span className="truncate">{candidate.personalInfo.location || "Location not specified"}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Calendar className="w-4 h-4 flex-shrink-0" />
+                            <span className="truncate">{formatDate(candidate.createdAt || "")}</span>
+                          </div>
+                        </div>
 
-                      {/* Skills */}
-                      <div className="flex flex-wrap gap-1">
-                        {(candidate.technicalSkills || []).slice(0, 5).map((skill, index) => (
-                          <Badge key={index} variant="secondary" className="text-xs">
-                            {skill}
-                          </Badge>
-                        ))}
-                        {(candidate.softSkills || []).slice(0, 2).map((skill, index) => (
-                          <Badge key={"soft-"+index} variant="outline" className="text-xs">
-                            {skill}
-                          </Badge>
-                        ))}
-                        {((candidate.technicalSkills?.length || 0) > 5 || (candidate.softSkills?.length || 0) > 2) && (
-                          <Badge variant="secondary" className="text-xs">
-                            +more
-                          </Badge>
-                        )}
+                        <div className="mb-3">
+                          <div className="text-sm">
+                            <span className="font-medium text-foreground">{candidate.professionalInfo.currentTitle || "No title specified"}</span>
+                            <span className="text-muted-foreground ml-2">• {candidate.roleApplied?.role || "No role specified"}</span>
+                      </div>
+                        </div>
+
+                        <div className="flex flex-wrap gap-2">
+                          {/* Combine all skills and show only first 7 */}
+                          {[
+                            ...(candidate.technicalSkills || []),
+                            ...(candidate.softSkills || [])
+                          ].slice(0, 7).map((skill, index) => (
+                            <Badge key={index} variant="secondary" className="text-xs px-2 py-1">
+                              {skill}
+                            </Badge>
+                          ))}
+                          {/* Show "+X more" if there are more than 7 skills */}
+                          {((candidate.technicalSkills?.length || 0) + (candidate.softSkills?.length || 0)) > 7 && (
+                            <Badge variant="outline" className="text-xs px-2 py-1">
+                              +{((candidate.technicalSkills?.length || 0) + (candidate.softSkills?.length || 0)) - 7} more
+                            </Badge>
+                          )}
+                        </div>
                       </div>
                     </div>
 
-                    {/* Actions */}
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-3 ml-4 flex-shrink-0">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs">
+                            Status
+                            <ChevronDown className="w-3 h-3" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-44">
+                          <DropdownMenuItem onClick={() => handleStatusChange(candidate._id, "in-progress")}>
+                            <div className="w-2.5 h-2.5 rounded-full bg-blue-500 mr-2"></div>
+                            In Progress
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleStatusChange(candidate._id, "hold")}>
+                            <div className="w-2.5 h-2.5 rounded-full bg-orange-500 mr-2"></div>
+                            On Hold
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleStatusChange(candidate._id, "accepted")}>
+                            <div className="w-2.5 h-2.5 rounded-full bg-green-500 mr-2"></div>
+                            Accepted
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleStatusChange(candidate._id, "rejected")}>
+                            <div className="w-2.5 h-2.5 rounded-full bg-red-500 mr-2"></div>
+                            Rejected
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+
                       <Dialog>
                         <DialogTrigger asChild>
                           <Button
                             variant="outline"
                             size="sm"
                             onClick={() => setSelectedCandidate(candidate)}
+                            className="gap-1.5 h-8 text-xs"
                           >
-                            <Eye className="h-4 w-4 mr-2" />
-                            View Details
+                            <Eye className="w-3 h-3" />
+                            Details
                           </Button>
                         </DialogTrigger>
                         <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
@@ -389,16 +487,16 @@ export default function Candidates() {
                           </div>
                         </DialogContent>
                       </Dialog>
+
                       <AlertDialog open={deleteDialogOpen === candidate._id} onOpenChange={(open) => setDeleteDialogOpen(open ? candidate._id : null)}>
                         <AlertDialogTrigger asChild>
                           <Button
                             variant="outline"
                             size="sm"
                             disabled={deletingCandidate === candidate._id || loading}
-                            className="group hover:border-destructive hover:bg-destructive hover:text-white"
+                            className="gap-1.5 h-8 text-xs text-destructive hover:text-destructive"
                           >
-                            <Trash2 className="h-4 w-4 text-destructive mr-2 group-hover:text-white" />
-                            Delete
+                            <Trash2 className="w-3 h-3" />
                           </Button>
                         </AlertDialogTrigger>
                         <AlertDialogContent>
@@ -432,9 +530,11 @@ export default function Candidates() {
                       </AlertDialog>
                     </div>
                   </div>
+                </Card>
+              );
+            })}
                 </div>
-              ))}
-            </div>
+
             {/* Pagination Controls */}
             {!searchMode && totalPages > 1 && (
               <div className="flex justify-center items-center gap-2 mt-8">
@@ -467,6 +567,7 @@ export default function Candidates() {
                 </Button>
               </div>
             )}
+          
             {filteredCandidates.length === 0 && !loading && !error && (
               <div className="text-center py-12">
                 <User className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
@@ -490,8 +591,7 @@ export default function Candidates() {
                 )}
               </div>
             )}
-          </CardContent>
-        </Card>
+        </div>
       </div>
     </Layout>
   )

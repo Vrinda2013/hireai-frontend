@@ -226,11 +226,11 @@
   }
   
   .interview-nav-item.active {
-    @apply bg-sidebar-primary text-sidebar-primary-foreground;
+    @apply bg-primary text-primary-foreground;
   }
   
   .interview-nav-item.active:hover {
-    @apply bg-sidebar-primary text-sidebar-primary-foreground;
+    @apply bg-primary/90 text-primary-foreground;
   }
   
   /* Enhanced slider styling */
@@ -250,4 +250,8 @@
   .slider:focus {
     @apply outline-none ring-2 ring-ring ring-offset-2;
   }
+}
+
+.candidate-avatar-custom {
+  background-color: #f3f4f6 !important; /* Light gray background */
 }

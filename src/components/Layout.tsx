@@ -19,7 +19,7 @@ export function Layout({ children, title, action }: LayoutProps) {
           <header className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
             <div className="flex h-14 items-center justify-between px-4 lg:px-6">
               <div className="flex items-center gap-4">
-                <SidebarTrigger className="p-2 rounded-lg hover:bg-muted" />
+                <SidebarTrigger className="p-2 rounded-lg hover:bg-muted hover:text-foreground transition-colors" />
                 {title && (
                   <h1 className="text-lg font-semibold text-foreground">{title}</h1>
                 )}

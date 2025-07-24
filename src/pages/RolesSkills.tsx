@@ -283,7 +283,7 @@ export default function RolesSkills() {
     if (loading) {
       return (
         <Layout title="Roles & Skills Management">
-          <div className="max-w-4xl mx-auto space-y-6">
+          <div className="w-full px-8 space-y-6">
             <div className="flex items-center justify-center py-12">
               <div className="text-center">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
@@ -298,7 +298,7 @@ export default function RolesSkills() {
     if (error) {
       return (
         <Layout title="Roles & Skills Management">
-          <div className="max-w-4xl mx-auto space-y-6">
+          <div className="w-full px-8 space-y-6">
             <Card className="interview-card">
               <CardContent className="pt-6">
                 <div className="flex items-center justify-center py-12">
@@ -329,7 +329,7 @@ export default function RolesSkills() {
         </div>
       }
     >
-      <div className="max-w-4xl mx-auto space-y-6">
+      <div className="w-full px-8 space-y-6">
         {/* Add New Role */}
         <Card>
           <CardHeader>
