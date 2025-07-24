@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Layout } from "@/components/Layout"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -9,7 +9,10 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
-import { Upload, FileText, Settings, ChevronDown, ChevronRight, Sparkles, RotateCcw, AlertCircle } from "lucide-react"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Progress } from "@/components/ui/progress"
+import { Upload, FileText, Settings, ChevronDown, ChevronRight, Sparkles, RotateCcw, AlertCircle, Search, CheckCircle, TrendingUp } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
 interface Question {
@@ -46,6 +49,15 @@ interface Role {
   skills: string[]
 }
 
+interface CompatibilityResult {
+  score: number
+  overallAssessment: string
+  strengths: string[]
+  missingSkills: string[]
+  recommendations: string[]
+  skillMatches: { skill: string; proficiency: string; match: boolean }[]
+}
+
 export default function Interview() {
   const { toast } = useToast()
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
@@ -60,6 +72,9 @@ export default function Interview() {
   const [addingSkill, setAddingSkill] = useState(false);
   const [showSkillInput, setShowSkillInput] = useState(false);
   const [customInstructions, setCustomInstructions] = useState("");
+  const [dragActive, setDragActive] = useState(false);
+  const [compatibilityResult, setCompatibilityResult] = useState<CompatibilityResult | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   // API data states
   const [roles, setRoles] = useState<Role[]>([])
@@ -113,6 +128,39 @@ export default function Interview() {
     return "Expert-level with edge cases and complex scenarios"
   }
 
+  const handleDrag = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setDragActive(true);
+    } else if (e.type === "dragleave") {
+      setDragActive(false);
+    }
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      const file = e.dataTransfer.files[0];
+      if (file.type === "application/pdf" || file.type.includes("word")) {
+        setUploadedFile(file);
+        toast({
+          title: "Resume uploaded",
+          description: `${file.name} has been uploaded successfully.`
+        });
+      } else {
+        toast({
+          title: "Invalid file type",
+          description: "Please upload a PDF or Word document.",
+          variant: "destructive"
+        });
+      }
+    }
+  }, [toast]);
+
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (file) {
@@ -131,6 +179,70 @@ export default function Interview() {
         : [...prev, skill]
     )
   }
+
+  const analyzeCompatibility = async () => {
+    if (!uploadedFile || !selectedRole || selectedSkills.length === 0) {
+      toast({
+        title: "Missing information",
+        description: "Please upload a resume, select a role, and choose skills first.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setIsAnalyzing(true);
+    
+    // Simulate AI analysis - in real app, this would call your AI service
+    setTimeout(() => {
+      const roleSkills = availableSkills;
+      const matchedSkills = selectedSkills.filter(skill => roleSkills.includes(skill));
+      const missingSkills = roleSkills.filter(skill => !selectedSkills.includes(skill));
+      
+      // Calculate a realistic compatibility score
+      const baseScore = (matchedSkills.length / roleSkills.length) * 80;
+      const experienceBonus = Math.min(3 * 2, 15); // Assuming 3 years experience
+      const finalScore = Math.min(baseScore + experienceBonus + Math.random() * 10, 95);
+
+      const mockResult: CompatibilityResult = {
+        score: Math.round(finalScore),
+        overallAssessment: finalScore >= 80 
+          ? "Excellent fit! This candidate demonstrates strong alignment with the role requirements."
+          : finalScore >= 60 
+          ? "Good fit with some gaps. This candidate shows promise with targeted development."
+          : "Moderate fit. Significant skill development would be needed for this role.",
+        strengths: [
+          `Strong proficiency in ${matchedSkills.slice(0, 3).join(", ")}`,
+          "3 years of relevant experience",
+          "Demonstrates continuous learning mindset",
+          "Well-structured resume with clear progression"
+        ],
+        missingSkills: missingSkills.slice(0, 3),
+        recommendations: [
+          missingSkills.length > 0 
+            ? `Focus interview on assessing ${missingSkills[0]} knowledge and learning potential`
+            : "Focus on advanced problem-solving and leadership scenarios",
+          "Ask about specific projects that demonstrate technical depth",
+          "Explore collaboration and communication skills",
+          "Discuss career goals and growth trajectory"
+        ],
+        skillMatches: roleSkills.map(skill => ({
+          skill,
+          proficiency: selectedSkills.includes(skill) 
+            ? ["Expert", "Advanced", "Intermediate"][Math.floor(Math.random() * 3)]
+            : "Not found",
+          match: selectedSkills.includes(skill)
+        }))
+      };
+
+      setCompatibilityResult(mockResult);
+      setIsAnalyzing(false);
+      
+      toast({
+        title: "Analysis complete!",
+        description: `Compatibility score: ${mockResult.score}%`
+      });
+    }, 2500);
+  };
 
   const generateQuestions = async () => {
     if (!selectedRole || selectedSkills.length === 0) {
@@ -331,12 +443,22 @@ export default function Interview() {
         </div>
       }
     >
-      <div className="max-w-4xl mx-auto space-y-6">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="px-8 py-6">
+        {/* Professional Header Section */}
+        <div className="mb-8 professional-header">
+          <div className="flex items-center gap-3 mb-3">
+            <h1 className="text-2xl font-semibold header-text-pulse-color">Interview Intelligence Starts Here</h1>
+          </div>
+          <p className="text-muted-foreground text-base leading-relaxed max-w-3xl">
+            Upload a resume, select role and skills, then generate AI-powered interview questions.
+          </p>
+        </div>
+        
+        <div className="grid lg:grid-cols-2 gap-8">
           {/* Configuration Panel */}
-          <div className="space-y-6">
+          <div className="vertical-rhythm">
             {/* Resume Upload */}
-            <Card className="interview-card">
+            <Card className="card-shadow">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Upload className="h-5 w-5" />
@@ -344,8 +466,32 @@ export default function Interview() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  <div className="border-2 border-dashed border-border rounded-lg p-8 text-center hover:border-primary/50 transition-colors">
+                <div
+                  className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+                    dragActive 
+                      ? "border-primary bg-primary/5" 
+                      : "border-border hover:border-primary/50"
+                  }`}
+                  onDragEnter={handleDrag}
+                  onDragLeave={handleDrag}
+                  onDragOver={handleDrag}
+                  onDrop={handleDrop}
+                >
+                  {uploadedFile ? (
+                    <div className="flex items-center justify-center">
+                      <FileText className="h-8 w-8 text-primary mr-3" />
+                      <div>
+                        <p className="font-medium">{uploadedFile.name}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {(uploadedFile.size / 1024 / 1024).toFixed(2)} MB
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <Upload className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                      <p className="text-lg font-medium mb-2">Drop your resume here</p>
+                      <p className="text-muted-foreground mb-4">or click to browse files</p>
                     <input
                       id="resume-upload"
                       type="file"
@@ -353,40 +499,28 @@ export default function Interview() {
                       onChange={handleFileUpload}
                       className="hidden"
                     />
-                    <label htmlFor="resume-upload" className="cursor-pointer">
-                      <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                      <p className="text-sm font-medium mb-2">
-                        {uploadedFile ? uploadedFile.name : "Click to upload resume"}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        PDF, DOC, or DOCX files accepted
-                      </p>
-                    </label>
-                  </div>
-                  {uploadedFile && (
-                    <div className="flex items-center gap-2 text-sm text-success">
-                      <FileText className="h-4 w-4" />
-                      Resume uploaded successfully
+                      <Button 
+                        variant="outline" 
+                        className="rounded-2xl"
+                        onClick={() => document.getElementById('resume-upload')?.click()}
+                      >
+                        Choose File
+                      </Button>
                     </div>
                   )}
                 </div>
               </CardContent>
             </Card>
 
-            {/* Role & Skills Selection */}
-            <Card className="interview-card">
+            {/* Role Selection */}
+            <Card className="card-shadow">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Settings className="h-5 w-5" />
-                  Role & Skills
-                </CardTitle>
+                <CardTitle>Role Selection</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
-                {/* Role Selection */}
-                <div>
-                  <Label className="text-sm font-medium">Select Role</Label>
+              <CardContent>
+                <Label htmlFor="role-select">Select Role</Label>
                   <Select value={selectedRole} onValueChange={setSelectedRole}>
-                    <SelectTrigger className="w-full mt-2">
+                  <SelectTrigger className="mt-1">
                       <SelectValue placeholder="Choose a role" />
                     </SelectTrigger>
                     <SelectContent>
@@ -397,33 +531,184 @@ export default function Interview() {
                       ))}
                     </SelectContent>
                   </Select>
-                </div>
-
-                {/* Skills Selection */}
-                {selectedRole && (
-                  <div>
-                    <Label className="text-sm font-medium">
-                      Select Skills ({selectedSkills.length} selected)
-                    </Label>
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      {availableSkills.map(skill => (
-                        <Badge
-                          key={skill}
-                          variant={selectedSkills.includes(skill) ? "default" : "outline"}
-                          className="cursor-pointer hover:bg-primary/80"
-                          onClick={() => toggleSkill(skill)}
-                        >
-                          {skill}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                )}
               </CardContent>
             </Card>
 
+                {/* Skills Selection */}
+                {selectedRole && (
+              <Card className="card-shadow">
+                <CardHeader>
+                  <CardTitle>Skills Selection</CardTitle>
+                  <p className="text-sm text-muted-foreground">
+                    Select skills to focus on ({selectedSkills.length} selected)
+                  </p>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {availableSkills.map((skill) => (
+                      <div key={skill} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={skill}
+                          checked={selectedSkills.includes(skill)}
+                          onCheckedChange={() => toggleSkill(skill)}
+                        />
+                        <Label htmlFor={skill} className="text-sm font-normal cursor-pointer">
+                          {skill}
+                        </Label>
+                      </div>
+                      ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Resume Compatibility Check */}
+            {uploadedFile && selectedRole && selectedSkills.length > 0 && (
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button
+                    onClick={analyzeCompatibility}
+                    disabled={isAnalyzing}
+                    variant="outline"
+                    size="lg"
+                    className="w-full rounded-2xl border-primary/20 hover:border-primary bg-primary/5 hover:bg-primary/10 compatibility-button"
+                  >
+                    <Search className="h-5 w-5 mr-2" />
+                    {isAnalyzing ? "Analyzing Compatibility..." : "Check Resume Compatibility"}
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle className="flex items-center">
+                      <TrendingUp className="h-5 w-5 mr-2" />
+                      Resume Compatibility Analysis
+                    </DialogTitle>
+                  </DialogHeader>
+                  
+                  {compatibilityResult && (
+                    <div className="space-y-6">
+                      {/* Compatibility Score */}
+                      <Card>
+                        <CardContent className="pt-6">
+                          <div className="text-center space-y-4">
+                            <div className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-primary/10 border-4 border-primary/20">
+                              <span className="text-2xl font-bold text-primary">
+                                {compatibilityResult.score}%
+                              </span>
+                            </div>
+                            <div>
+                              <h3 className="text-lg font-semibold mb-1">Overall Compatibility</h3>
+                              <p className="text-muted-foreground">{compatibilityResult.overallAssessment}</p>
+                            </div>
+                            <Progress value={compatibilityResult.score} className="w-full" />
+                          </div>
+                        </CardContent>
+                      </Card>
+
+                      <div className="grid md:grid-cols-2 gap-6">
+                        {/* Strengths */}
+                        <Card>
+                          <CardHeader>
+                            <CardTitle className="flex items-center text-green-600">
+                              <CheckCircle className="h-5 w-5 mr-2" />
+                              Key Strengths
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <ul className="space-y-2">
+                              {compatibilityResult.strengths.map((strength, index) => (
+                                <li key={index} className="flex items-start">
+                                  <CheckCircle className="h-4 w-4 mt-0.5 mr-2 text-green-600 flex-shrink-0" />
+                                  <span className="text-sm">{strength}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </CardContent>
+                        </Card>
+
+                        {/* Missing Skills */}
+                        <Card>
+                          <CardHeader>
+                            <CardTitle className="flex items-center text-amber-600">
+                              <AlertCircle className="h-5 w-5 mr-2" />
+                              Skills to Explore
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            {compatibilityResult.missingSkills.length > 0 ? (
+                              <ul className="space-y-2">
+                                {compatibilityResult.missingSkills.map((skill, index) => (
+                                  <li key={index} className="flex items-center">
+                                    <AlertCircle className="h-4 w-4 mr-2 text-amber-600" />
+                                    <span className="text-sm">{skill}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <p className="text-sm text-muted-foreground">All role skills are covered!</p>
+                )}
+              </CardContent>
+            </Card>
+                      </div>
+
+                      {/* Skill Breakdown */}
+                      <Card>
+                        <CardHeader>
+                          <CardTitle>Skill Assessment Breakdown</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="grid gap-3">
+                            {compatibilityResult.skillMatches.map((skillMatch, index) => (
+                              <div key={index} className="flex items-center justify-between p-3 rounded-lg border">
+                                <div className="flex items-center space-x-3">
+                                  {skillMatch.match ? (
+                                    <CheckCircle className="h-4 w-4 text-green-600" />
+                                  ) : (
+                                    <AlertCircle className="h-4 w-4 text-amber-600" />
+                                  )}
+                                  <span className="font-medium text-sm">{skillMatch.skill}</span>
+                                </div>
+                                <Badge 
+                                  variant={skillMatch.match ? "default" : "secondary"}
+                                  className="text-xs"
+                                >
+                                  {skillMatch.proficiency}
+                                </Badge>
+                              </div>
+                            ))}
+                          </div>
+                        </CardContent>
+                      </Card>
+
+                      {/* Recommendations */}
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="flex items-center">
+                            <Sparkles className="h-5 w-5 mr-2" />
+                            Interview Recommendations
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <ul className="space-y-3">
+                            {compatibilityResult.recommendations.map((rec, index) => (
+                              <li key={index} className="flex items-start">
+                                <div className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center mr-3 mt-0.5">
+                                  <span className="text-xs font-medium text-primary">{index + 1}</span>
+                                </div>
+                                <span className="text-sm">{rec}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </CardContent>
+                      </Card>
+                    </div>
+                  )}
+                </DialogContent>
+              </Dialog>
+            )}
+
             {/* Interview Settings */}
-            <Card className="interview-card">
+            <Card className="card-shadow">
               <CardHeader>
                 <CardTitle>Interview Settings</CardTitle>
               </CardHeader>
@@ -541,7 +826,8 @@ export default function Interview() {
                 <Button
                   onClick={generateQuestions}
                   disabled={!selectedRole || selectedSkills.length === 0 || isGenerating}
-                  className="w-full interview-button-primary"
+                  size="lg"
+                  className="w-full rounded-2xl button-hover elevated-shadow"
                 >
                   {isGenerating ? (
                     <>
@@ -550,7 +836,7 @@ export default function Interview() {
                     </>
                   ) : (
                     <>
-                      <Sparkles className="h-4 w-4 mr-2" />
+                      <Sparkles className="h-5 w-5 mr-2" />
                       Generate Interview
                     </>
                   )}
@@ -560,9 +846,9 @@ export default function Interview() {
           </div>
 
           {/* Results Panel */}
-          <div className="space-y-6">
+          <div className="vertical-rhythm">
             {generatedQuestions.length > 0 ? (
-              <Card className="interview-card">
+              <Card className="card-shadow">
                 <CardHeader>
                   <CardTitle className="flex items-center justify-between">
                     <span>Interview Questions</span>
@@ -613,7 +899,7 @@ export default function Interview() {
                 </CardContent>
               </Card>
             ) : (
-              <Card className="interview-card text-center py-12">
+              <Card className="card-shadow text-center py-12">
                 <CardContent>
                   <Sparkles className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                   <h3 className="text-lg font-semibold mb-2">Ready to Generate</h3>

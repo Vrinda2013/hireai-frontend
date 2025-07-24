@@ -5,8 +5,10 @@ import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { Search, Eye, Upload, User, Mail, Phone, Calendar, Briefcase, GraduationCap } from "lucide-react"
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"
+import { Search, Eye, Upload, User, Mail, Phone, Calendar, Briefcase, GraduationCap, Trash2 } from "lucide-react"
 import { useEffect, useRef } from "react"
+import { useToast } from "@/hooks/use-toast"
 
 // --- Types matching the API ---
 interface CandidateAPI {
@@ -52,7 +54,45 @@ export default function Candidates() {
   const [loading, setLoading] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [deletingCandidate, setDeletingCandidate] = useState<string | null>(null)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState<string | null>(null)
   const observer = useRef<HTMLDivElement | null>(null)
+  const { toast } = useToast()
+
+  // Delete candidate function
+  const deleteCandidate = async (candidateId: string) => {
+    setDeletingCandidate(candidateId)
+    try {
+      const response = await fetch(`http://localhost:3000/api/candidate-resumes/${candidateId}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        // Remove the candidate from the local state
+        setCandidates(prev => prev.filter(candidate => candidate._id !== candidateId))
+        toast({
+          title: "Success",
+          description: "Candidate deleted successfully",
+        })
+      } else {
+        throw new Error(result.message || "Failed to delete candidate")
+      }
+    } catch (error) {
+      console.error('Error deleting candidate:', error)
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to delete candidate",
+        variant: "destructive"
+      })
+    } finally {
+      setDeletingCandidate(null)
+    }
+  }
 
   // Fetch candidates for a page
   const fetchCandidates = (pageNum: number) => {
@@ -250,104 +290,147 @@ export default function Candidates() {
                     </div>
 
                     {/* Actions */}
-                    <Dialog>
-                      <DialogTrigger asChild>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setSelectedCandidate(candidate)}
-                        >
-                          <Eye className="h-4 w-4 mr-2" />
-                          View Details
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-                        <DialogHeader>
-                          <DialogTitle className="flex items-center gap-2">
-                            <User className="h-5 w-5" />
-                            {candidate.personalInfo.fullName} - Resume Details
-                          </DialogTitle>
-                        </DialogHeader>
-                        <div className="space-y-6 py-4">
-                          {/* Contact Info */}
-                          <div>
-                            <h3 className="font-semibold mb-3 flex items-center gap-2">
-                              <Mail className="h-4 w-4" />
-                              Contact Information
-                            </h3>
-                            <div className="space-y-2 text-sm">
-                              <p><strong>Email:</strong> {candidate.personalInfo.email}</p>
-                              <p><strong>Phone:</strong> {candidate.personalInfo.phone}</p>
-                              {candidate.personalInfo.location && <p><strong>Location:</strong> {candidate.personalInfo.location}</p>}
-                              {candidate.personalInfo.linkedin && <p><strong>LinkedIn:</strong> <a href={candidate.personalInfo.linkedin} target="_blank" rel="noopener noreferrer" className="text-primary underline">{candidate.personalInfo.linkedin}</a></p>}
-                              {candidate.roleApplied?.role && (
-                                <p><strong>Role Applied:</strong> {candidate.roleApplied.role}</p>
+                    <div className="flex items-center gap-2">
+                      <Dialog>
+                        <DialogTrigger asChild>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setSelectedCandidate(candidate)}
+                          >
+                            <Eye className="h-4 w-4 mr-2" />
+                            View Details
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+                          <DialogHeader>
+                            <DialogTitle className="flex items-center gap-2">
+                              <User className="h-5 w-5" />
+                              {candidate.personalInfo.fullName} - Resume Details
+                            </DialogTitle>
+                          </DialogHeader>
+                          <div className="space-y-6 py-4">
+                            {/* Contact Info */}
+                            <div>
+                              <h3 className="font-semibold mb-3 flex items-center gap-2">
+                                <Mail className="h-4 w-4" />
+                                Contact Information
+                              </h3>
+                              <div className="space-y-2 text-sm">
+                                <p><strong>Email:</strong> {candidate.personalInfo.email}</p>
+                                <p><strong>Phone:</strong> {candidate.personalInfo.phone}</p>
+                                {candidate.personalInfo.location && <p><strong>Location:</strong> {candidate.personalInfo.location}</p>}
+                                {candidate.personalInfo.linkedin && <p><strong>LinkedIn:</strong> <a href={candidate.personalInfo.linkedin} target="_blank" rel="noopener noreferrer" className="text-primary underline">{candidate.personalInfo.linkedin}</a></p>}
+                                {candidate.roleApplied?.role && (
+                                  <p><strong>Role Applied:</strong> {candidate.roleApplied.role}</p>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Professional Info */}
+                            <div>
+                              <h3 className="font-semibold mb-3">Professional Info</h3>
+                              <div className="space-y-1 text-sm">
+                                {candidate.professionalInfo.currentTitle && <p><strong>Current Title:</strong> {candidate.professionalInfo.currentTitle}</p>}
+                                {candidate.professionalInfo.yearsOfExperience && <p><strong>Experience:</strong> {candidate.professionalInfo.yearsOfExperience}</p>}
+                                {candidate.professionalInfo.education && <p><strong>Education:</strong> {candidate.professionalInfo.education}</p>}
+                                {candidate.professionalInfo.certifications && candidate.professionalInfo.certifications.length > 0 && (
+                                  <p><strong>Certifications:</strong> {candidate.professionalInfo.certifications.join(", ")}</p>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Summary */}
+                            {candidate.professionalSummary && (
+                            <div>
+                              <h3 className="font-semibold mb-3">Professional Summary</h3>
+                              <p className="text-sm text-muted-foreground leading-relaxed">
+                                  {candidate.professionalSummary}
+                              </p>
+                            </div>
+                            )}
+
+                            {/* Skills */}
+                            <div>
+                              <h3 className="font-semibold mb-3">Technical Skills</h3>
+                              <div className="flex flex-wrap gap-2">
+                                {(candidate.technicalSkills || []).map((skill, index) => (
+                                  <Badge key={index} variant="secondary">
+                                    {skill}
+                                  </Badge>
+                                ))}
+                              </div>
+                              <h3 className="font-semibold mb-3 mt-4">Soft Skills</h3>
+                              <div className="flex flex-wrap gap-2">
+                                {(candidate.softSkills || []).map((skill, index) => (
+                                  <Badge key={index} variant="outline">
+                                    {skill}
+                                  </Badge>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* Experience */}
+                            <div>
+                              <h3 className="font-semibold mb-3 flex items-center gap-2">
+                                <Briefcase className="h-4 w-4" />
+                                Work Experience
+                              </h3>
+                              <div className="space-y-4">
+                                {(candidate.workExperience || []).map((exp, index) => (
+                                  <div key={index} className="border-l-2 border-primary/20 pl-4">
+                                    <h4 className="font-medium">{exp.title}</h4>
+                                    <p className="text-sm text-muted-foreground">{exp.company} {exp.years ? `• ${exp.years}` : ""}</p>
+                                    <p className="text-sm mt-2 leading-relaxed">{exp.description}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        </DialogContent>
+                      </Dialog>
+                      <AlertDialog open={deleteDialogOpen === candidate._id} onOpenChange={(open) => setDeleteDialogOpen(open ? candidate._id : null)}>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={deletingCandidate === candidate._id || loading}
+                            className="group hover:border-destructive hover:bg-destructive hover:text-white"
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive mr-2 group-hover:text-white" />
+                            Delete
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Delete Candidate</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Are you sure you want to delete {candidate.personalInfo.fullName}? This action cannot be undone and will permanently remove all candidate data.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel disabled={deletingCandidate === candidate._id}>Cancel</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={async () => {
+                                await deleteCandidate(candidate._id)
+                                setDeleteDialogOpen(null)
+                              }}
+                              disabled={deletingCandidate === candidate._id}
+                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            >
+                              {deletingCandidate === candidate._id ? (
+                                <>
+                                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                                  Deleting...
+                                </>
+                              ) : (
+                                "Delete Candidate"
                               )}
-                            </div>
-                          </div>
-
-                          {/* Professional Info */}
-                          <div>
-                            <h3 className="font-semibold mb-3">Professional Info</h3>
-                            <div className="space-y-1 text-sm">
-                              {candidate.professionalInfo.currentTitle && <p><strong>Current Title:</strong> {candidate.professionalInfo.currentTitle}</p>}
-                              {candidate.professionalInfo.yearsOfExperience && <p><strong>Experience:</strong> {candidate.professionalInfo.yearsOfExperience}</p>}
-                              {candidate.professionalInfo.education && <p><strong>Education:</strong> {candidate.professionalInfo.education}</p>}
-                              {candidate.professionalInfo.certifications && candidate.professionalInfo.certifications.length > 0 && (
-                                <p><strong>Certifications:</strong> {candidate.professionalInfo.certifications.join(", ")}</p>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Summary */}
-                          {candidate.professionalSummary && (
-                          <div>
-                            <h3 className="font-semibold mb-3">Professional Summary</h3>
-                            <p className="text-sm text-muted-foreground leading-relaxed">
-                                {candidate.professionalSummary}
-                            </p>
-                          </div>
-                          )}
-
-                          {/* Skills */}
-                          <div>
-                            <h3 className="font-semibold mb-3">Technical Skills</h3>
-                            <div className="flex flex-wrap gap-2">
-                              {(candidate.technicalSkills || []).map((skill, index) => (
-                                <Badge key={index} variant="secondary">
-                                  {skill}
-                                </Badge>
-                              ))}
-                            </div>
-                            <h3 className="font-semibold mb-3 mt-4">Soft Skills</h3>
-                            <div className="flex flex-wrap gap-2">
-                              {(candidate.softSkills || []).map((skill, index) => (
-                                <Badge key={index} variant="outline">
-                                  {skill}
-                                </Badge>
-                              ))}
-                            </div>
-                          </div>
-
-                          {/* Experience */}
-                          <div>
-                            <h3 className="font-semibold mb-3 flex items-center gap-2">
-                              <Briefcase className="h-4 w-4" />
-                              Work Experience
-                            </h3>
-                            <div className="space-y-4">
-                              {(candidate.workExperience || []).map((exp, index) => (
-                                <div key={index} className="border-l-2 border-primary/20 pl-4">
-                                  <h4 className="font-medium">{exp.title}</h4>
-                                  <p className="text-sm text-muted-foreground">{exp.company} {exp.years ? `• ${exp.years}` : ""}</p>
-                                  <p className="text-sm mt-2 leading-relaxed">{exp.description}</p>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
-                      </DialogContent>
-                    </Dialog>
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
                   </div>
                 </div>
               ))}
