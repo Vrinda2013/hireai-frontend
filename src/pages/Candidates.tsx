@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef } from "react"                                                                                                                                                                                                                                         
 import { Layout } from "@/components/Layout"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -8,7 +8,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Search, Eye, Upload, User, Mail, Phone, Calendar, Briefcase, GraduationCap, Trash2, Filter, ChevronDown, MapPin } from "lucide-react"
+import { Textarea } from "@/components/ui/textarea"
+import { Search, Eye, Upload, User, Mail, Phone, Calendar, Briefcase, GraduationCap, Trash2, Filter, ChevronDown, MapPin, MessageSquare } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
 
@@ -25,6 +26,26 @@ const formatDate = (dateString: string) => {
   } catch (error) {
     return "Invalid date"
   }
+}
+
+// Helper function to normalize status from API
+const normalizeStatus = (status: string): CandidateStatus => {
+  if (!status) return "in-progress" as CandidateStatus
+  
+  const statusMap: Record<string, CandidateStatus> = {
+    "in-progress": "in-progress" as CandidateStatus,
+    "In Progress": "in-progress" as CandidateStatus,
+    "In progress": "in-progress" as CandidateStatus,
+    "hold": "hold" as CandidateStatus,
+    "Hold": "hold" as CandidateStatus,
+    "On Hold": "hold" as CandidateStatus,
+    "accepted": "accepted" as CandidateStatus,
+    "Accepted": "accepted" as CandidateStatus,
+    "rejected": "rejected" as CandidateStatus,
+    "Rejected": "rejected" as CandidateStatus
+  }
+  
+  return statusMap[status] || ("in-progress" as CandidateStatus)
 }
 
 // --- Types matching the API ---
@@ -57,7 +78,8 @@ interface CandidateAPI {
   technicalSkills?: string[]
   softSkills?: string[]
   createdAt?: string
-  status?: CandidateStatus
+  status?: string // API returns string like "In Progress", we normalize it to CandidateStatus
+  review?: string // Add review field
 }
 
 export type CandidateStatus = "in-progress" | "hold" | "accepted" | "rejected";
@@ -100,6 +122,9 @@ export default function Candidates() {
   const [deletingCandidate, setDeletingCandidate] = useState<string | null>(null)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<string>("all")
+  const [reviewDialogOpen, setReviewDialogOpen] = useState<string | null>(null)
+  const [reviewText, setReviewText] = useState("")
+  const [savingReview, setSavingReview] = useState(false)
   const observer = useRef<HTMLDivElement | null>(null)
   const { toast } = useToast()
 
@@ -140,15 +165,113 @@ export default function Candidates() {
 
   // Handle status change
   const handleStatusChange = (id: string, newStatus: CandidateStatus) => {
-    setCandidates(prev => 
-      prev.map(candidate => 
-        candidate._id === id ? { ...candidate, status: newStatus } : candidate
-      )
-    );
-    toast({
-      title: "Status Updated",
-      description: "Candidate status has been successfully updated.",
+    const candidate = candidates.find(c => c._id === id);
+    if (!candidate) return;
+
+    // Update both status and review in one API call
+    const updateData = {
+      status: newStatus === "in-progress" ? "In Progress" : 
+              newStatus === "hold" ? "On Hold" :
+              newStatus === "accepted" ? "Accepted" :
+              newStatus === "rejected" ? "Rejected" : "In Progress",
+      review: candidate.review || ""
+    };
+
+    fetch(`http://localhost:3000/api/candidate-resumes/${id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(updateData)
+    })
+    .then(response => {
+      if (!response.ok) {
+        throw new Error(`Failed to update status: ${response.status}`);
+      }
+      return response.json();
+    })
+    .then(() => {
+      // Update local state
+      setCandidates(prev => 
+        prev.map(candidate => 
+          candidate._id === id ? { ...candidate, status: newStatus } : candidate
+        )
+      );
+      toast({
+        title: "Status Updated",
+        description: "Candidate status has been successfully updated.",
+      });
+    })
+    .catch(error => {
+      console.error('Error updating status:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update status. Please try again.",
+        variant: "destructive"
+      });
     });
+  };
+
+  // Handle review dialog open
+  const handleReviewOpen = (candidate: CandidateAPI) => {
+    setSelectedCandidate(candidate);
+    setReviewText(candidate.review || "");
+    setReviewDialogOpen(candidate._id);
+  };
+
+  // Handle saving review
+  const handleSaveReview = async () => {
+    if (!selectedCandidate) return;
+
+    try {
+      setSavingReview(true);
+      
+      // Update both status and review in one API call
+      const updateData = {
+        status: selectedCandidate.status === "in-progress" ? "In Progress" : 
+                selectedCandidate.status === "hold" ? "On Hold" :
+                selectedCandidate.status === "accepted" ? "Accepted" :
+                selectedCandidate.status === "rejected" ? "Rejected" : "In Progress",
+        review: reviewText.trim()
+      };
+
+      const response = await fetch(`http://localhost:3000/api/candidate-resumes/${selectedCandidate._id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updateData)
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to save review: ${response.status}`);
+      }
+
+      // Update local state
+      setCandidates(prev => 
+        prev.map(candidate => 
+          candidate._id === selectedCandidate._id 
+            ? { ...candidate, review: reviewText.trim() }
+            : candidate
+        )
+      );
+
+      setReviewDialogOpen(null);
+      setReviewText("");
+      toast({
+        title: "Review Saved",
+        description: "Candidate review has been successfully saved.",
+      });
+    } catch (error) {
+      console.error('Error saving review:', error);
+      toast({
+        title: "Error",
+        description: "Failed to save review. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setSavingReview(false);
+    }
   };
 
   // Fetch candidates for a page
@@ -160,7 +283,7 @@ export default function Candidates() {
         // Add default status to candidates if not present
         const candidatesWithStatus = (data.data || []).map((candidate: CandidateAPI) => ({
           ...candidate,
-          status: candidate.status || "in-progress" as CandidateStatus
+          status: normalizeStatus(candidate.status)
         }));
         setCandidates(candidatesWithStatus)
         setTotalPages(data.pagination?.pages || 1)
@@ -192,7 +315,7 @@ export default function Candidates() {
         // Add default status to candidates if not present
         const candidatesWithStatus = (data.data || []).map((candidate: CandidateAPI) => ({
           ...candidate,
-          status: candidate.status || "in-progress" as CandidateStatus
+          status: normalizeStatus(candidate.status)
         }));
         setCandidates(candidatesWithStatus)
         setTotalPages(1)
@@ -360,41 +483,15 @@ export default function Candidates() {
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-3 ml-4 flex-shrink-0">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs">
-                            Status
-                            <ChevronDown className="w-3 h-3" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-44">
-                          <DropdownMenuItem onClick={() => handleStatusChange(candidate._id, "in-progress")}>
-                            <div className="w-2.5 h-2.5 rounded-full bg-blue-500 mr-2"></div>
-                            In Progress
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleStatusChange(candidate._id, "hold")}>
-                            <div className="w-2.5 h-2.5 rounded-full bg-orange-500 mr-2"></div>
-                            On Hold
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleStatusChange(candidate._id, "accepted")}>
-                            <div className="w-2.5 h-2.5 rounded-full bg-green-500 mr-2"></div>
-                            Accepted
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleStatusChange(candidate._id, "rejected")}>
-                            <div className="w-2.5 h-2.5 rounded-full bg-red-500 mr-2"></div>
-                            Rejected
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-
+                    <div className="flex flex-col gap-2 ml-4 flex-shrink-0">
+                      {/* Row 1: Details */}
                       <Dialog>
                         <DialogTrigger asChild>
                           <Button
                             variant="outline"
                             size="sm"
                             onClick={() => setSelectedCandidate(candidate)}
-                            className="gap-1.5 h-8 text-xs"
+                            className="gap-1.5 h-8 text-xs w-full"
                           >
                             <Eye className="w-3 h-3" />
                             Details
@@ -484,17 +581,74 @@ export default function Candidates() {
                                 ))}
                               </div>
                             </div>
+
+                            {/* Review Section */}
+                            <div>
+                              <h3 className="font-semibold mb-3 flex items-center gap-2">
+                                <MessageSquare className="h-4 w-4" />
+                                Review
+                              </h3>
+                              <div className="space-y-2">
+                                {candidate.review ? (
+                                  <div className="bg-muted p-3 rounded-lg">
+                                    <p className="text-sm whitespace-pre-wrap">{candidate.review}</p>
+                                  </div>
+                                ) : (
+                                  <p className="text-sm text-muted-foreground">No review added yet.</p>
+                                )}
+                              </div>
+                            </div>
                           </div>
                         </DialogContent>
                       </Dialog>
 
+                      {/* Row 2: Review */}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleReviewOpen(candidate)}
+                        className="gap-1.5 h-8 text-xs w-full"
+                      >
+                        <MessageSquare className="w-3 h-3" />
+                        Review
+                      </Button>
+
+                      {/* Row 3: Status */}
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs w-full">
+                            Status
+                            <ChevronDown className="w-3 h-3" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-44">
+                          <DropdownMenuItem onClick={() => handleStatusChange(candidate._id, "in-progress")}>
+                            <div className="w-2.5 h-2.5 rounded-full bg-blue-500 mr-2"></div>
+                            In Progress
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleStatusChange(candidate._id, "hold")}>
+                            <div className="w-2.5 h-2.5 rounded-full bg-orange-500 mr-2"></div>
+                            On Hold
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleStatusChange(candidate._id, "accepted")}>
+                            <div className="w-2.5 h-2.5 rounded-full bg-green-500 mr-2"></div>
+                            Accepted
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleStatusChange(candidate._id, "rejected")}>
+                            <div className="w-2.5 h-2.5 rounded-full bg-red-500 mr-2"></div>
+                            Rejected
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+
+                      {/* Row 4: Delete */}
                       <AlertDialog open={deleteDialogOpen === candidate._id} onOpenChange={(open) => setDeleteDialogOpen(open ? candidate._id : null)}>
                         <AlertDialogTrigger asChild>
                           <Button
                             variant="outline"
                             size="sm"
                             disabled={deletingCandidate === candidate._id || loading}
-                            className="gap-1.5 h-8 text-xs text-destructive hover:text-destructive"
+                            className="gap-1.5 h-8 text-xs text-destructive hover:text-white hover:bg-destructive hover:border-destructive w-full"
                           >
                             <Trash2 className="w-3 h-3" />
                           </Button>
@@ -593,6 +747,59 @@ export default function Candidates() {
             )}
         </div>
       </div>
+
+      {/* Review Dialog */}
+      <Dialog open={reviewDialogOpen !== null} onOpenChange={(open) => !open && setReviewDialogOpen(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <MessageSquare className="h-5 w-5" />
+              Add Review for {selectedCandidate?.personalInfo.fullName}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <label className="text-sm font-medium mb-2 block">Review Notes</label>
+              <Textarea
+                placeholder="Enter your review notes for this candidate..."
+                value={reviewText}
+                onChange={(e) => setReviewText(e.target.value)}
+                className="min-h-[200px] resize-none"
+                disabled={savingReview}
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setReviewDialogOpen(null);
+                  setReviewText("");
+                }}
+                disabled={savingReview}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleSaveReview}
+                disabled={savingReview || !reviewText.trim()}
+                className="gap-2"
+              >
+                {savingReview ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <MessageSquare className="w-4 h-4" />
+                    Save Review
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Layout>
   )
 }
