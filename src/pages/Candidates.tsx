@@ -115,6 +115,7 @@ export default function Candidates() {
   const [selectedCandidate, setSelectedCandidate] = useState<CandidateAPI | null>(null)
   const [page, setPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
+  const [totalCandidates, setTotalCandidates] = useState(0)
   const [hasMore, setHasMore] = useState(true)
   const [loading, setLoading] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -142,8 +143,8 @@ export default function Candidates() {
       const result = await response.json()
 
       if (result.success) {
-        // Remove the candidate from the local state
-        setCandidates(prev => prev.filter(candidate => candidate._id !== candidateId))
+        // Refetch candidates to maintain proper count and pagination
+        fetchCandidates(page, statusFilter)
         toast({
           title: "Success",
           description: "Candidate deleted successfully",
@@ -297,6 +298,7 @@ export default function Candidates() {
         setCandidates(candidatesWithStatus)
         setTotalPages(data.pagination?.pages || 1)
         setPage(data.pagination?.page || 1)
+        setTotalCandidates(data.pagination?.total || 0)
         setHasMore(data.pagination?.page < data.pagination?.pages)
         setError(null)
       })
@@ -400,7 +402,7 @@ export default function Candidates() {
       action={
         <div className="flex items-center gap-3">
           <span className="text-sm text-muted-foreground">
-            {filteredCandidates.length} of {candidates.length} candidate{candidates.length !== 1 ? 's' : ''}
+            {filteredCandidates.length} of {totalCandidates} candidates
           </span>
         </div>
       }
