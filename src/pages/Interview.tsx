@@ -191,57 +191,47 @@ export default function Interview() {
     }
 
     setIsAnalyzing(true);
-    
-    // Simulate AI analysis - in real app, this would call your AI service
-    setTimeout(() => {
-      const roleSkills = availableSkills;
-      const matchedSkills = selectedSkills.filter(skill => roleSkills.includes(skill));
-      const missingSkills = roleSkills.filter(skill => !selectedSkills.includes(skill));
-      
-      // Calculate a realistic compatibility score
-      const baseScore = (matchedSkills.length / roleSkills.length) * 80;
-      const experienceBonus = Math.min(3 * 2, 15); // Assuming 3 years experience
-      const finalScore = Math.min(baseScore + experienceBonus + Math.random() * 10, 95);
+    try {
+      const formData = new FormData();
+      formData.append('pdf', uploadedFile);
+      formData.append('role', roles.find(r => r._id === selectedRole)?.role || '');
+      formData.append('skills', JSON.stringify(selectedSkills));
 
-      const mockResult: CompatibilityResult = {
-        score: Math.round(finalScore),
-        overallAssessment: finalScore >= 80 
-          ? "Excellent fit! This candidate demonstrates strong alignment with the role requirements."
-          : finalScore >= 60 
-          ? "Good fit with some gaps. This candidate shows promise with targeted development."
-          : "Moderate fit. Significant skill development would be needed for this role.",
-        strengths: [
-          `Strong proficiency in ${matchedSkills.slice(0, 3).join(", ")}`,
-          "3 years of relevant experience",
-          "Demonstrates continuous learning mindset",
-          "Well-structured resume with clear progression"
-        ],
-        missingSkills: missingSkills.slice(0, 3),
-        recommendations: [
-          missingSkills.length > 0 
-            ? `Focus interview on assessing ${missingSkills[0]} knowledge and learning potential`
-            : "Focus on advanced problem-solving and leadership scenarios",
-          "Ask about specific projects that demonstrate technical depth",
-          "Explore collaboration and communication skills",
-          "Discuss career goals and growth trajectory"
-        ],
-        skillMatches: roleSkills.map(skill => ({
-          skill,
-          proficiency: selectedSkills.includes(skill) 
-            ? ["Expert", "Advanced", "Intermediate"][Math.floor(Math.random() * 3)]
-            : "Not found",
-          match: selectedSkills.includes(skill)
+      const response = await fetch('http://localhost:3000/api/interview-questions/candidate-compatibility', {
+        method: 'POST',
+        body: formData
+      });
+      if (!response.ok) throw new Error('Failed to analyze compatibility');
+      const result = await response.json();
+
+      // Map API response to CompatibilityResult
+      const compatibilityResult: CompatibilityResult = {
+        score: result.compatibilityScore,
+        overallAssessment: result.compatibilitySummary,
+        strengths: result.keyStrengths,
+        missingSkills: result.skillsToExplore,
+        recommendations: result.interviewRecommendations,
+        skillMatches: (result.skillAssessment || []).map((s: any) => ({
+          skill: s.skill,
+          proficiency: s.status,
+          match: s.status !== 'Not found'
         }))
       };
-
-      setCompatibilityResult(mockResult);
-      setIsAnalyzing(false);
-      
+      setCompatibilityResult(compatibilityResult);
       toast({
         title: "Analysis complete!",
-        description: `Compatibility score: ${mockResult.score}%`
+        description: `Compatibility score: ${compatibilityResult.score}%`
       });
-    }, 2500);
+    } catch (error) {
+      setCompatibilityResult(null);
+      toast({
+        title: "Error",
+        description: "Failed to analyze compatibility.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsAnalyzing(false);
+    }
   };
 
   const generateQuestions = async () => {
