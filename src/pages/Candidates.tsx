@@ -170,10 +170,7 @@ export default function Candidates() {
 
     // Update both status and review in one API call
     const updateData = {
-      status: newStatus === "in-progress" ? "In Progress" : 
-              newStatus === "hold" ? "On Hold" :
-              newStatus === "accepted" ? "Accepted" :
-              newStatus === "rejected" ? "Rejected" : "In Progress",
+      status: mapStatusToAPI(newStatus),
       review: candidate.review || ""
     };
 
@@ -275,9 +272,21 @@ export default function Candidates() {
   };
 
   // Fetch candidates for a page
-  const fetchCandidates = (pageNum: number) => {
+  const fetchCandidates = (pageNum: number, status: string = statusFilter) => {
     setLoading(true)
-    fetch(`http://localhost:3000/api/candidate-resumes?page=${pageNum}&limit=5`)
+    
+    // Build query parameters
+    const params = new URLSearchParams({
+      page: pageNum.toString(),
+      limit: '5'
+    })
+    
+    // Add status filter if not "all"
+    if (status !== "all") {
+      params.append('status', mapStatusToAPI(status))
+    }
+    
+    fetch(`http://localhost:3000/api/candidate-resumes?${params.toString()}`)
       .then(res => res.json())
       .then(data => {
         // Add default status to candidates if not present
@@ -295,12 +304,41 @@ export default function Candidates() {
       .finally(() => setLoading(false))
   }
 
+  // Handle status filter change
+  const handleStatusFilterChange = (newStatus: string) => {
+    setStatusFilter(newStatus)
+    setPage(1) // Reset to first page when filter changes
+    fetchCandidates(1, newStatus)
+  }
+
+  // Map internal status values to API status values
+  const mapStatusToAPI = (status: string): string => {
+    const statusMap: Record<string, string> = {
+      "in-progress": "In Progress",
+      "hold": "On Hold", 
+      "accepted": "Accepted",
+      "rejected": "Rejected"
+    }
+    return statusMap[status] || status
+  }
+
+  // Map API status values to internal status values
+  const mapAPIStatusToInternal = (status: string): string => {
+    const statusMap: Record<string, string> = {
+      "In Progress": "in-progress",
+      "On Hold": "hold",
+      "Accepted": "accepted", 
+      "Rejected": "rejected"
+    }
+    return statusMap[status] || "in-progress"
+  }
+
   // Search by email
   const handleSearch = () => {
     const email = searchTerm.trim()
     if (!email) {
       setSearchMode(false)
-      fetchCandidates(1)
+      fetchCandidates(1, statusFilter)
       return
     }
     setSearchLoading(true)
@@ -312,7 +350,7 @@ export default function Candidates() {
     })
       .then(res => res.json())
       .then(data => {
-        // Add default status to candidates if not present
+        // Normalize status for all candidates
         const candidatesWithStatus = (data.data || []).map((candidate: CandidateAPI) => ({
           ...candidate,
           status: normalizeStatus(candidate.status)
@@ -328,14 +366,14 @@ export default function Candidates() {
 
   // Initial fetch
   useEffect(() => {
-    fetchCandidates(1)
+    fetchCandidates(1, statusFilter)
     // eslint-disable-next-line
   }, [])
 
   // Pagination controls
   const handlePageChange = (newPage: number) => {
     if (newPage < 1 || newPage > totalPages || newPage === page) return
-    fetchCandidates(newPage)
+    fetchCandidates(newPage, statusFilter)
   }
 
   // Filter candidates based on search and status
@@ -384,7 +422,7 @@ export default function Candidates() {
               />
           </div>
           
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <Select value={statusFilter} onValueChange={handleStatusFilterChange}>
             <SelectTrigger className="w-48">
               <Filter className="w-4 h-4 mr-2" />
               <SelectValue placeholder="Filter by status" />
@@ -470,15 +508,15 @@ export default function Candidates() {
                             ...(candidate.softSkills || [])
                           ].slice(0, 7).map((skill, index) => (
                             <Badge key={index} variant="secondary" className="text-xs px-2 py-1">
-                              {skill}
-                            </Badge>
-                          ))}
+                            {skill}
+                          </Badge>
+                        ))}
                           {/* Show "+X more" if there are more than 7 skills */}
                           {((candidate.technicalSkills?.length || 0) + (candidate.softSkills?.length || 0)) > 7 && (
                             <Badge variant="outline" className="text-xs px-2 py-1">
                               +{((candidate.technicalSkills?.length || 0) + (candidate.softSkills?.length || 0)) - 7} more
-                            </Badge>
-                          )}
+                          </Badge>
+                        )}
                         </div>
                       </div>
                     </div>
