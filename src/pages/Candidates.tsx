@@ -143,8 +143,17 @@ export default function Candidates() {
       const result = await response.json()
 
       if (result.success) {
-        // Refetch candidates to maintain proper count and pagination
-        fetchCandidates(page, statusFilter)
+        // Check if this is the last candidate on the current page
+        const isLastCandidateOnPage = candidates.length === 1
+        
+        // If it's the last candidate on the page and we're not on page 1, go to previous page
+        if (isLastCandidateOnPage && page > 1) {
+          fetchCandidates(page - 1, statusFilter)
+        } else {
+          // Otherwise, refetch the current page
+          fetchCandidates(page, statusFilter)
+        }
+        
         toast({
           title: "Success",
           description: "Candidate deleted successfully",
@@ -279,7 +288,7 @@ export default function Candidates() {
     // Build query parameters
     const params = new URLSearchParams({
       page: pageNum.toString(),
-      limit: '5'
+      limit: '10'
     })
     
     // Add status filter if not "all"
@@ -481,11 +490,11 @@ export default function Candidates() {
                           <div className="flex items-center gap-2">
                             <Mail className="w-4 h-4 flex-shrink-0" />
                             <span className="truncate">{candidate.personalInfo.email}</span>
-                        </div>
+                          </div>
                           <div className="flex items-center gap-2">
                             <Phone className="w-4 h-4 flex-shrink-0" />
                             <span className="truncate">{candidate.personalInfo.phone}</span>
-                        </div>
+                          </div>
                           <div className="flex items-center gap-2">
                             <MapPin className="w-4 h-4 flex-shrink-0" />
                             <span className="truncate">{candidate.personalInfo.location || "Location not specified"}</span>
@@ -500,7 +509,7 @@ export default function Candidates() {
                           <div className="text-sm">
                             <span className="font-medium text-foreground">{candidate.professionalInfo.currentTitle || "No title specified"}</span>
                             <span className="text-muted-foreground ml-2">• {candidate.roleApplied?.role || "No role specified"}</span>
-                      </div>
+                          </div>
                         </div>
 
                         <div className="flex flex-wrap gap-2">
@@ -510,15 +519,15 @@ export default function Candidates() {
                             ...(candidate.softSkills || [])
                           ].slice(0, 7).map((skill, index) => (
                             <Badge key={index} variant="secondary" className="text-xs px-2 py-1">
-                            {skill}
-                          </Badge>
-                        ))}
+                              {skill}
+                            </Badge>
+                          ))}
                           {/* Show "+X more" if there are more than 7 skills */}
                           {((candidate.technicalSkills?.length || 0) + (candidate.softSkills?.length || 0)) > 7 && (
                             <Badge variant="outline" className="text-xs px-2 py-1">
                               +{((candidate.technicalSkills?.length || 0) + (candidate.softSkills?.length || 0)) - 7} more
-                          </Badge>
-                        )}
+                            </Badge>
+                          )}
                         </div>
                       </div>
                     </div>
