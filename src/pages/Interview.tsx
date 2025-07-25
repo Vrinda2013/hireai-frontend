@@ -373,6 +373,51 @@ export default function Interview() {
     if (fileInput) fileInput.value = ''
   }
 
+  const handleDownloadPdf = async (withAnswers: boolean) => {
+    if (!selectedRole || !roles.length || !generatedQuestions.length) {
+      toast({
+        title: "Missing data",
+        description: "Please generate questions first.",
+        variant: "destructive"
+      });
+      return;
+    }
+    const roleObj = roles.find(r => r._id === selectedRole);
+    const payload = {
+      role: roleObj?.role || "",
+      requestedSkills: selectedSkills,
+      questionComplexity: complexity,
+      numberOfQuestions: questionCount,
+      customInstructions: customInstructions || null,
+      questions: generatedQuestions.map(q => ({
+        question: q.question,
+        type: q.type,
+        complexity: q.complexity,
+        expectedAnswer: q.expectedAnswer,
+        skills: q.skills
+      }))
+    };
+    const url = `http://localhost:3000/api/interview-questions/download-pdf?withAnswers=${withAnswers}`;
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      if (!response.ok) throw new Error("Failed to download PDF");
+      const blob = await response.blob();
+      const link = document.createElement("a");
+      link.href = window.URL.createObjectURL(blob);
+      link.download = withAnswers ? "interview-questions-with-answers.pdf" : "interview-questions.pdf";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      toast({ title: "Preparing download", description: "Your download will start shortly..." });
+    } catch (err) {
+      toast({ title: "Error", description: "Failed to download PDF.", variant: "destructive" });
+    }
+  };
+
   if (loading) {
     return (
       <Layout 
@@ -896,8 +941,38 @@ export default function Interview() {
                       </Collapsible>
                     ))}
                   </div>
+                  {/* Download Buttons */}
+                  <div className="flex flex-col sm:flex-row gap-3 justify-center mt-6">
+                    <Button
+                      variant="outline"
+                      size="lg"
+                      className="flex-1 flex items-center justify-center gap-2 rounded-lg font-semibold"
+                      onClick={() => handleDownloadPdf(false)}
+                    >
+                      <span className="flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" className="inline-block">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v12m0 0l-4-4m4 4l4-4M4 20h16" />
+                        </svg>
+                        Download Questions
+                      </span>
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="lg"
+                      className="flex-1 flex items-center justify-center gap-2 rounded-lg font-semibold"
+                      onClick={() => handleDownloadPdf(true)}
+                    >
+                      <span className="flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" className="inline-block">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v12m0 0l-4-4m4 4l4-4M4 20h16" />
+                        </svg>
+                        Download Questions + Answers
+                      </span>
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
+            
             ) : (
               <Card className="card-shadow text-center py-12">
                 <CardContent>
