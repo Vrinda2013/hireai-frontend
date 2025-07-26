@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Search, Eye, Upload, User, Mail, Phone, Calendar, Briefcase, GraduationCap, Trash2, Filter, ChevronDown, MapPin, MessageSquare } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
+import { ReviewModal, ReviewData } from '../components/review/ReviewModal';
 
 // Helper function to format date
 const formatDate = (dateString: string) => {
@@ -79,7 +80,7 @@ interface CandidateAPI {
   softSkills?: string[]
   createdAt?: string
   status?: string // API returns string like "In Progress", we normalize it to CandidateStatus
-  review?: string // Add review field
+  review?: ReviewData | string // Support both new ReviewData structure and legacy string format
 }
 
 export type CandidateStatus = "in-progress" | "hold" | "accepted" | "rejected";
@@ -222,64 +223,18 @@ export default function Candidates() {
   // Handle review dialog open
   const handleReviewOpen = (candidate: CandidateAPI) => {
     setSelectedCandidate(candidate);
-    setReviewText(candidate.review || "");
+    // For new ReviewData format, we don't need to set reviewText
+    // For legacy string format, we can set it if needed
+    if (typeof candidate.review === 'string') {
+      setReviewText(candidate.review || "");
+    } else {
+      setReviewText(""); // Reset for new format
+    }
     setReviewDialogOpen(candidate._id);
   };
 
-  // Handle saving review
-  const handleSaveReview = async () => {
-    if (!selectedCandidate) return;
-
-    try {
-      setSavingReview(true);
-      
-      // Update both status and review in one API call
-      const updateData = {
-        status: selectedCandidate.status === "in-progress" ? "In Progress" : 
-                selectedCandidate.status === "hold" ? "On Hold" :
-                selectedCandidate.status === "accepted" ? "Accepted" :
-                selectedCandidate.status === "rejected" ? "Rejected" : "In Progress",
-        review: reviewText.trim()
-      };
-
-      const response = await fetch(`http://localhost:3000/api/candidate-resumes/${selectedCandidate._id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(updateData)
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to save review: ${response.status}`);
-      }
-
-      // Update local state
-      setCandidates(prev => 
-        prev.map(candidate => 
-          candidate._id === selectedCandidate._id 
-            ? { ...candidate, review: reviewText.trim() }
-            : candidate
-        )
-      );
-
-      setReviewDialogOpen(null);
-      setReviewText("");
-      toast({
-        title: "Review Saved",
-        description: "Candidate review has been successfully saved.",
-      });
-    } catch (error) {
-      console.error('Error saving review:', error);
-      toast({
-        title: "Error",
-        description: "Failed to save review. Please try again.",
-        variant: "destructive"
-      });
-    } finally {
-      setSavingReview(false);
-    }
-  };
+  // Handle saving review - REMOVED since we now use ReviewModal
+  // const handleSaveReview = async () => { ... }
 
   // Fetch candidates for a page
   const fetchCandidates = (pageNum: number, status: string = statusFilter) => {
@@ -640,7 +595,38 @@ export default function Candidates() {
                               <div className="space-y-2">
                                 {candidate.review ? (
                                   <div className="bg-muted p-3 rounded-lg">
-                                    <p className="text-sm whitespace-pre-wrap">{candidate.review}</p>
+                                    {typeof candidate.review === 'string' ? (
+                                      <p className="text-sm whitespace-pre-wrap">{candidate.review}</p>
+                                    ) : (
+                                      <div className="text-sm space-y-3">
+                                        <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                                          <span><strong>Overall Rating:</strong> {candidate.review.overallRating}/5</span>
+                                          <span><strong>Progress:</strong> {candidate.review.progress.completedCriteria}/{candidate.review.progress.totalCriteria} criteria</span>
+                                          <span><strong>Completion:</strong> {candidate.review.progress.percentage}%</span>
+                                        </div>
+                                        {candidate.review.criteria.length > 0 && (
+                                          <div className="space-y-2">
+                                            <p className="font-medium text-xs text-muted-foreground uppercase tracking-wide">Review Criteria</p>
+                                            <div className="space-y-3">
+                                              {candidate.review.criteria.map((criteria, index) => (
+                                                <div key={index} className="border-l-2 border-blue-200 pl-3 py-1">
+                                                  <div className="flex items-center justify-between mb-1">
+                                                    <h4 className="font-medium text-sm">{criteria.title}</h4>
+                                                    <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">
+                                                      {criteria.rating}/5
+                                                    </span>
+                                                  </div>
+                                                  <p className="text-xs text-muted-foreground mb-1">{criteria.description}</p>
+                                                  <div className="bg-gray-50 p-2 rounded text-xs">
+                                                    <span className="font-medium text-gray-600">Feedback:</span> {criteria.feedback || ''}
+                                                  </div>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
                                   </div>
                                 ) : (
                                   <p className="text-sm text-muted-foreground">No review added yet.</p>
@@ -798,57 +784,64 @@ export default function Candidates() {
       </div>
 
       {/* Review Dialog */}
-      <Dialog open={reviewDialogOpen !== null} onOpenChange={(open) => !open && setReviewDialogOpen(null)}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <MessageSquare className="h-5 w-5" />
-              Add Review for {selectedCandidate?.personalInfo.fullName}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div>
-              <label className="text-sm font-medium mb-2 block">Review Notes</label>
-              <Textarea
-                placeholder="Enter your review notes for this candidate..."
-                value={reviewText}
-                onChange={(e) => setReviewText(e.target.value)}
-                className="min-h-[200px] resize-none"
-                disabled={savingReview}
-              />
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setReviewDialogOpen(null);
-                  setReviewText("");
-                }}
-                disabled={savingReview}
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handleSaveReview}
-                disabled={savingReview || !reviewText.trim()}
-                className="gap-2"
-              >
-                {savingReview ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                    Saving...
-                  </>
-                ) : (
-                  <>
-                    <MessageSquare className="w-4 h-4" />
-                    Save Review
-                  </>
-                )}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <ReviewModal
+        isOpen={reviewDialogOpen !== null}
+        onClose={() => {
+          setReviewDialogOpen(null);
+          setSelectedCandidate(null);
+        }}
+        candidateName={selectedCandidate?.personalInfo.fullName || ''}
+        candidateEmail={selectedCandidate?.personalInfo.email || ''}
+        position={selectedCandidate?.roleApplied?.role || ''}
+        interviewDate={selectedCandidate?.createdAt ? formatDate(selectedCandidate.createdAt) : ''}
+        existingReview={selectedCandidate?.review && typeof selectedCandidate.review !== 'string' ? selectedCandidate.review : undefined}
+        onSave={async (reviewData) => {
+          if (!selectedCandidate) return;
+          setSavingReview(true);
+          try {
+            // Save the review as a structured object matching the new backend schema
+            const updateData = {
+              status: selectedCandidate.status === "in-progress" ? "In Progress" : 
+                      selectedCandidate.status === "hold" ? "On Hold" :
+                      selectedCandidate.status === "accepted" ? "Accepted" :
+                      selectedCandidate.status === "rejected" ? "Rejected" : "In Progress",
+              review: reviewData
+            };
+            const response = await fetch(`http://localhost:3000/api/candidate-resumes/${selectedCandidate._id}`, {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify(updateData)
+            });
+            if (!response.ok) {
+              throw new Error(`Failed to save review: ${response.status}`);
+            }
+            setCandidates(prev => 
+              prev.map(candidate => 
+                candidate._id === selectedCandidate._id 
+                  ? { ...candidate, review: reviewData as ReviewData }
+                  : candidate
+              )
+            );
+            setReviewDialogOpen(null);
+            setSelectedCandidate(null);
+            toast({
+              title: "Review Saved",
+              description: "Candidate review has been successfully saved.",
+            });
+          } catch (error) {
+            console.error('Error saving review:', error);
+            toast({
+              title: "Error",
+              description: "Failed to save review. Please try again.",
+              variant: "destructive"
+            });
+          } finally {
+            setSavingReview(false);
+          }
+        }}
+      />
     </Layout>
   )
 }
